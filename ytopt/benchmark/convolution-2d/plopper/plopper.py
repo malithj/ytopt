@@ -1,7 +1,12 @@
-import os, sys, subprocess, random, re
+import os
+import sys
+import subprocess
+import random
+import re
+
 
 class Plopper:
-    def __init__(self,sourcefile,outputdir):
+    def __init__(self, sourcefile, outputdir):
 
         # Initializing global variables
         self.sourcefile = sourcefile
@@ -10,14 +15,14 @@ class Plopper:
         if not os.path.exists(self.outputdir):
             os.makedirs(self.outputdir)
 
-    #Creating a dictionary using parameter label and value
+    # Creating a dictionary using parameter label and value
     def createDict(self, x, params):
         dictVal = {}
         for p, v in zip(params, x):
             dictVal[p] = v
-        return(dictVal)
+        return (dictVal)
 
-    #Replace the Markers in the source file with the corresponding Pragma values
+    # Replace the Markers in the source file with the corresponding Pragma values
     def plotValues(self, dictVal, inputfile, outputfile):
         with open(inputfile, "r") as f1:
             buf = f1.readlines()
@@ -37,7 +42,8 @@ class Plopper:
                         if not re.search(r"#P([0-9]+)", modify_line):
                             stop = True
                         for m in re.finditer(r"#P([0-9]+)", modify_line):
-                            modify_line = re.sub(r"#P"+m.group(1), dictVal["P"+m.group(1)], modify_line)
+                            modify_line = re.sub(
+                                r"#P"+m.group(1), dictVal["P"+m.group(1)], modify_line)
                 except Exception as e:
                     print("we got exception", e)
                     print(dictVal)
@@ -45,14 +51,15 @@ class Plopper:
                 if modify_line != line:
                     f2.write(modify_line)
                 else:
-                    #To avoid writing the Marker
+                    # To avoid writing the Marker
                     f2.write(line)
-    
+
     # Function to find the execution time of the interim file, and return the execution time as cost to the search module
     def findRuntime(self, x, params):
         interimfile = ""
         exetime = 1
-        counter = random.randint(1, 10001) # To reduce collision increasing the sampling intervals
+        # To reduce collision increasing the sampling intervals
+        counter = random.randint(1, 10001)
 
         interimfile = self.outputdir+"/tmp_"+str(counter)+".c"
 
@@ -60,7 +67,7 @@ class Plopper:
         dictVal = self.createDict(x, params)
         self.plotValues(dictVal, self.sourcefile, interimfile)
 
-        #compile and find the execution time
+        # compile and find the execution time
         tmpbinary = interimfile[:-2]
 
         kernel_idx = self.sourcefile.rfind('/')
@@ -68,23 +75,26 @@ class Plopper:
         utilities_dir = kernel_dir+"/utilities"
 
         commonflags = f"""-DEXTRALARGE_DATASET -DPOLYBENCH_TIME -I{utilities_dir} -I{kernel_dir} {interimfile} {utilities_dir}/polybench.c -o {tmpbinary} -lm -g """
-        
-        gcc_cmd = f"""clang -O2 -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=sm_75 {commonflags} -I/soft/compilers/cuda/cuda-11.4.0/include -L/soft/compilers/cuda/cuda-11.4.0/lib64 -Wl,-rpath=/soft/compilers/cuda/cuda-11.4.0/lib64 -lcudart_static -ldl -lrt -pthread"""
-        
+
+        # gcc_cmd = f"""clang -O2 -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=sm_75 {commonflags} -I/soft/compilers/cuda/cuda-11.4.0/include -L/soft/compilers/cuda/cuda-11.4.0/lib64 -Wl,-rpath=/soft/compilers/cuda/cuda-11.4.0/lib64 -lcudart_static -ldl -lrt -pthread"""
+        gcc_cmd = f"""clang -O2 -fopenmp -fopenmp-targets=nvptx64 -Xopenmp-target -march=sm_80 --libomptarget-nvptx-bc-path=/work/nucar/malithjayaweera.d/llvm-12/build-openmp/projects/openmp/libomptarget/libomptarget-nvptx-cuda_112-sm_80.bc {commonflags} -I/shared/centos7/cuda/11.2/include -L/shared/centos7/cuda/11.2/lib64 -Wl,-rpath=/shared/centos7/cuda/11.2/lib64 -lcudart_static -ldl -lrt -pthread"""
+
         run_cmd = kernel_dir + "/exe.pl " + tmpbinary
 #         print (run_cmd)
-        #Find the compilation status using subprocess
-        compilation_status = subprocess.run(gcc_cmd, shell=True, stderr=subprocess.PIPE)
+        # Find the compilation status using subprocess
+        compilation_status = subprocess.run(
+            gcc_cmd, shell=True, stderr=subprocess.PIPE)
 
-        #Find the execution time only when the compilation return code is zero, else return infinity
-        if compilation_status.returncode == 0 :
-            execution_status = subprocess.run(run_cmd, shell=True, stdout=subprocess.PIPE)
+        # Find the execution time only when the compilation return code is zero, else return infinity
+        if compilation_status.returncode == 0:
+            execution_status = subprocess.run(
+                run_cmd, shell=True, stdout=subprocess.PIPE)
             exetime = float(execution_status.stdout.decode('utf-8'))
             if exetime == 0:
                 exetime = 1
         else:
             print(compilation_status.stderr)
             print("compile failed")
-            
-        #return execution time as cost
+
+        # return execution time as cost
         return exetime
